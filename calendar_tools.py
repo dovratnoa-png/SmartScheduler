@@ -102,3 +102,30 @@ def list_tasks(user_id):
     except Exception as e:
         print(f"❌ שגיאה בשליפת משימות למשתמש {user_id}: {e}")
         return []
+
+
+def list_user_calendars(user_id):
+    """
+    שולף את כל היומנים של המשתמש מחשבון הגוגל שלו
+    """
+    service = get_calendar_service(user_id)
+    if not service:
+        return None
+    
+    try:
+        # פנייה לגוגל לקבלת רשימת היומנים
+        calendar_list = service.calendarList().list().execute()
+        items = calendar_list.get('items', [])
+        
+        calendars = []
+        for item in items:
+            # אנחנו שומרים רק את ה-ID ואת השם התצוגה של היומן
+            calendars.append({
+                'id': item['id'],
+                'summary': item.get('summary', 'יומן ללא שם')
+            })
+            
+        return calendars
+    except Exception as e:
+        print(f"Error fetching calendars: {e}")
+        return None        

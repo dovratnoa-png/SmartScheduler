@@ -3,6 +3,8 @@ import json
 import re
 from datetime import datetime
 from dotenv import load_dotenv
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 load_dotenv() 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -66,7 +68,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if events is None:
         login_url = f"https://smartscheduler-pknn.onrender.com/login/{user_id}"
         await update.message.reply_text(
-            f"היי! איזה כיף שבאת. 📅\n"
+            f"היי! איזה כיף שבאת 📅\n"
             f"נראה שעוד לא חיברת את היומן שלך. כדי שאוכל להתחיל לעזור לך עם הלו\"ז, צריך לאשר גישה באופן חד-פעמי בלינק הבא:\n"
             f"{login_url}"
         )
@@ -81,7 +83,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_histories[user_id].append({"role": "user", "content": user_text})
     chat_histories[user_id] = chat_histories[user_id][-10:] # שומרים 10 הודעות אחרונות כדי לא להעמיס
     
-    await update.message.reply_text("קיבלתי. רק רגע...")
+    #await update.message.reply_text("קיבלתי. רק רגע...")
     
     events_str_list = []
     for e in existing_events:
@@ -137,6 +139,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print(f"❌ שגיאה: {e}")
         await update.message.reply_text("משהו השתבש בתקשורת עם ה-AI.")
 
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    welcome_text = (
+        "היי! 👋 אני לא סתם יומן, אני העוזר האישי שלך:)\n"
+        "אני מחובר ללו״ז שלך ויודע לארגן, להכניס, להזיז ולייעץ לך איך לנהל את הזמן נכון.\n\n"
+        "הנה כמה דברים שאפשר לבקש ממני:\n"
+        "📅 *סיכום חכם:* 'מה הלו״ז שלי מחר? איפה יש לי אוויר לנשום?'\n"
+        "⚡️ *פעולות מהירות:* 'תקבע לי פגישה עם הצוות מחר ב-10:00.'\n"
+        "🧠 .ייעוץ ותכנון מורכב:* 'אני חייבת למצוא מחר שעה וחצי לסיים עבודה וממש רוצה גם להכניס אימון. מה הזמן האידיאלי? ואם צריך - תציע לי אילו פגישות כדאי להזיז ליום ראשון. אגב, אם אתה חושב שאני צריכה להכניס עבודה על מטלות נוספות לפי הדד-ליינים שלהן - תציף'\n\n"
+        "כדי להתחיל, פשוט תכתבי לי הודעה. אם עדיין לא התחברת ליומן - מיד אשלח לך לינק!"
+    )
+    await update.message.reply_text(welcome_text, parse_mode='Markdown')
+
 async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -188,6 +202,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 if __name__ == '__main__':
     app = ApplicationBuilder().token(BOT_TOKEN).build()
+    application.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
     app.add_handler(CallbackQueryHandler(button_click))
     app.run_polling()
