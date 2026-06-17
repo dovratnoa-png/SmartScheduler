@@ -22,10 +22,11 @@ def login(user_id):
     )
     
     auth_url, state = flow.authorization_url(
-        access_type='offline',
-        include_granted_scopes='true',
-        state=user_id
-    )
+    access_type='offline',
+    include_granted_scopes='true',
+    state=user_id,
+    prompt='consent'
+)
     
     # הקסם החדש: שומרים את האובייקט בזיכרון של השרת תחת ה-ID של המשתמש!
     active_flows[user_id] = flow
