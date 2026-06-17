@@ -142,7 +142,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = (
         "היי! 👋 אני לא סתם יומן, אני העוזר האישי שלך:)\n"
-        "אני מחובר ללו״ז שלך ויודע לארגן, להכניס, להזיז ולייעץ לך איך לנהל את הזמן נכון.\n\n"
+        "אני מחובר ללו״ז שלך (Google Calendar) ולמשימות שלך (Google Tasks) ויודע לארגן, להכניס ולייעץ לך איך לנהל את הזמן נכון.\n\n"
         "הנה כמה דברים שאפשר לבקש ממני:\n"
         "📅 <b>סיכום חכם:</b> 'מה הלו״ז שלי מחר? איפה יש לי אוויר לנשום?'\n"
         "⚡️ <b>פעולות מהירות:</b> 'תקבע לי פגישה עם הצוות מחר ב-10:00.'\n"
