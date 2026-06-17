@@ -228,7 +228,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(f"מעולה! שמרתי {len(selected)} יומנים בהצלחה. 🚀\nמעכשיו אנתח לאיזה יומן כל משימה שייכת.")
         return
 
-   if data.startswith("cal_"):
+    if data.startswith("cal_"):
         # שולפים את המספר הסידורי של היומן מתוך הכפתור
         cal_index = int(data.replace("cal_", ""))
         calendars = context.user_data.get('all_calendars', [])
