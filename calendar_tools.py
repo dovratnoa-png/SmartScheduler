@@ -10,18 +10,21 @@ SCOPES = ['https://www.googleapis.com/auth/calendar', 'https://www.googleapis.co
 
 CALENDAR_ID = os.getenv('CALENDAR_ID', 'primary')
 print(f"DEBUG: Using Calendar ID: {CALENDAR_ID}") 
-def get_calendar_service(user_id):
+def get_credentials(user_id):
     token_file = f'token_{user_id}.json'
-    creds = None
-    
     if os.path.exists(token_file):
         creds = Credentials.from_authorized_user_file(token_file, SCOPES)
-        
-    if not creds or not creds.valid:
+        if creds and creds.valid:
+            return creds
+    return None
+
+def get_calendar_service(user_id):
+    creds = get_credentials(user_id)
+    if not creds:
         return None
-        
     return build('calendar', 'v3', credentials=creds)
 
+    
 def list_events(user_id, calendar_ids=None):
     service = get_calendar_service(user_id)
     if not service:
@@ -176,7 +179,7 @@ def list_user_calendars(user_id):
 def delete_event(user_id, calendar_id, event_id):
     """מוחק אירוע קיים מגוגל קלנדר"""
     try:
-        creds = get_credentials(user_id) # משתמש בפונקציה הקיימת שלך לשליפת הטוקן
+        creds = get_credentials(user_id) 
         service = build('calendar', 'v3', credentials=creds)
         
         service.events().delete(calendarId=calendar_id, eventId=event_id).execute()
