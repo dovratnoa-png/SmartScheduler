@@ -22,21 +22,45 @@ def get_calendar_service(user_id):
         
     return build('calendar', 'v3', credentials=creds)
 
-def list_events(user_id):
+def list_events(user_id, calendar_ids=None):
     service = get_calendar_service(user_id)
     if not service:
         return None
+        
+    # אם לא קיבלנו רשימת יומנים ספציפית, נשתמש בראשי כברירת מחדל
+    if not calendar_ids:
+        calendar_ids = ['primary']
+        
     now = datetime.utcnow().isoformat() + 'Z'
-    events_result = service.events().list(calendarId='primary', timeMin=now,
-                                         singleEvents=True,
-                                        orderBy='startTime').execute()
-    return events_result.get('items', [])
-
-def create_event(user_id, summary, start_time, end_time):
-    service = get_calendar_service(user_id)
+    all_events = []
     
+    # עוברים על כל יומן שהמשתמש בחר ואוספים ממנו את האירועים
+    for cal_id in calendar_ids:
+        try:
+            events_result = service.events().list(
+                calendarId=cal_id, 
+                timeMin=now,
+                singleEvents=True,
+                orderBy='startTime'
+            ).execute()
+            
+            all_events.extend(events_result.get('items', []))
+        except Exception as e:
+            print(f"Error reading calendar {cal_id}: {e}")
+            
+    # בגלל שאספנו אירועים מכמה יומנים שונים, צריך למיין אותם מחדש לפי השעה
+    def get_start_time(event):
+        # מנסה למשוך שעה מדויקת, ואם זה אירוע של יום שלם - מושך רק תאריך
+        return event['start'].get('dateTime', event['start'].get('date'))
+        
+    all_events.sort(key=get_start_time)
+    
+    return all_events
+
+def create_event(user_id, summary, start_time, end_time, calendar_id='primary'):
+    service = get_calendar_service(user_id)
     if not service:
-        return False 
+        return "שגיאה בחיבור לגוגל" 
         
     start_dt = datetime.fromisoformat(start_time.replace('Z', ''))
     end_dt = datetime.fromisoformat(end_time.replace('Z', ''))
@@ -49,7 +73,7 @@ def create_event(user_id, summary, start_time, end_time):
         'end': {'dateTime': end_str},
     }
     
-    return service.events().insert(calendarId='primary', body=event).execute()
+    return service.events().insert(calendarId=calendar_id, body=event).execute()
 
 def is_overlap(new_start_iso, new_end_iso, existing_events):
     new_start = datetime.fromisoformat(new_start_iso.replace('Z', ''))
