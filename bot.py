@@ -92,49 +92,61 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = (
         "היי! 👋 כיף שבאת :)\n\n"
         "בקרוב (אם תאשר/י לי) אהיה מחובר ללו״ז שלך ולמשימות שלך דרך Google ואתחיל לארגן, להכניס ולייעץ לך איך לנהל את הזמן נכון.\n\n"
-        "הנה דוגמה לדברים שאפשר לבקש ממני, אבל אני AI אז תרגיש/י חופשי לאתגר אותי:\n"
+        "הנה דוגמה לדברים שאפשר לבקש ממני, אבל אני AI אז תרגיש/י חופשי לאתגר אותי:\n\n"
         "📅 <b>סיכום חכם:</b> 'מה הלו״ז שלי מחר? איפה יש לי אוויר לנשום?'\n"
         "⚡️ <b>פעולות מהירות:</b> 'תקבע לי פגישה עם הצוות מחר ב-10:00.'\n"
         "🧠 <b>ייעוץ ותכנון מורכב (לשם כך התכנסנו):</b> 'אני חייבת למצוא מחר שעתיים כדי לסיים עבודה וממש רוצה גם להכניס אימון. ובאופן כללי לא דיברתי עם סבתא מלא זמן'\n"
         "אם צריך - אגיד לך, לדוגמה, אילו אירועים כדאי להזיז ליום אחר, או שצריך לשריין זמן עבודה על דברים נוספים, כי אני רואה את הלו״ז המלא ביחס לדד-ליינים.\n"
         "ועוד טיפים כאלה :)\n\n"
         "כדי שנוכל להתחיל, פשוט לחץ/י כאן לאישור החיבור ליומן (זה מאובטח 🤓):\n"
-        f"🔗 <a href='{login_url}'>לחץ/י כאן להתחברות ל-Google Calendar</a>"
+        f"🔗 <a href='{login_url}'>התחברות ל-Google</a>"
     )
 
     # שולחים את ההודעה עם HTML
     await update.message.reply_text(welcome_text, parse_mode='HTML')
 
 async def choose_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # אנחנו צריכות לדעת אם זה הגיע מפקודה או מכפתור, אז נשתמש ב-update.callback_query אם קיים
+    # 1. זיהוי המשתמש (בלי לקבוע מראש איך לשלוח את ההודעה)
     if update.callback_query:
         await update.callback_query.answer()
         user_id = str(update.callback_query.message.chat_id)
-        reply_func = update.callback_query.message.reply_text
     else:
         user_id = str(update.effective_user.id)
-        reply_func = update.message.reply_text
 
+    # 2. שליפת היומנים מגוגל
     calendars = list_user_calendars(user_id)
     if not calendars:
-        await reply_func("עוד לא התחברת לגוגל, או שלא מצאתי יומנים בחשבון הזה.")
+        error_msg = "עוד לא התחברת לגוגל, או שלא מצאתי יומנים בחשבון הזה."
+        if update.callback_query:
+            await update.callback_query.edit_message_text(error_msg)
+        else:
+            await update.message.reply_text(error_msg)
         return
 
+    # שמירה בזיכרון של הבוט
     context.user_data['all_calendars'] = calendars
     if 'selected_calendars' not in context.user_data:
         context.user_data['selected_calendars'] = []
 
-    # ההסבר המפורט שביקשת:
-    explainer_text = (
-        "<b>בוא נגדיר את היומנים שלך:</b>\n\n"
-        "1. <b>קריאה:</b> בחר את היומנים שמהם אני צריך לקרוא נתונים (כדי שאוכל לראות הכל ולמנוע התנגשויות בלו״ז).\n"
-        "2. <b>כתיבה חכמה:</b> כשנרצה לקבוע אירוע חדש, אני (ה-AI) אנתח לפי ההקשר לאיזה יומן הכי מתאים להוסיף אותו (עבודה, לימודים, אישי וכו').\n"
-        "3. <b>שקיפות:</b> אני תמיד אציג לך לפני אישור לאיזה יומן אני מתכנן להוסיף את האירוע, כדי שתוכל לוודא שזה מתאים לך. 🛡️\n\n"
-        "סמן את היומנים הרצויים ולחץ על 'סיימתי'."
+    # 3. הטקסט החדש והנקי (משלב את ההצלחה ואת ההסבר)
+    text = (
+        "🎉 <b>החיבור הצליח</b>\n\n"
+        "כדי שאוכל לנהל את הלו״ז שלך בצורה חכמה, בוא/י נגדיר פעם אחת את היומנים:\n\n"
+        "👁 <b>קריאה:</b> אקרא מכל היומנים כדי למנוע התנגשויות.\n"
+        "✍️ <b>כתיבה חכמה:</b> אנתח כל משימה ואשבץ ליומן המתאים (עבודה, לימודים, אישי וכו').\n"
+        "🛡 <b>שליטה שלך:</b> תמיד אציג לך לאיזה יומן אני משבץ לאישור סופי.\n\n"
+        "👇 סמן/י את היומנים הרלוונטיים לקריאה למטה ולחץ/י 'סיימתי':"
     )
 
     reply_markup = build_calendar_keyboard(context.user_data['all_calendars'], context.user_data['selected_calendars'])
-    await reply_func(explainer_text, reply_markup=reply_markup, parse_mode='HTML')
+    
+    # 4. רגע האמת של ה-UX: עריכה מול שליחה חדשה
+    if update.callback_query:
+        # כאן קורה הקסם: ההודעה הקיימת משתנה במקום להוסיף אחת חדשה!
+        await update.callback_query.edit_message_text(text, reply_markup=reply_markup, parse_mode='HTML')
+    else:
+        # הגעה מפקודה רגילה (כמו /calendars)
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='HTML')
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
