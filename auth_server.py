@@ -18,7 +18,7 @@ def login(user_id):
     flow = Flow.from_client_secrets_file(
         CLIENT_SECRETS_FILE,
         scopes=SCOPES,
-        redirect_uri='http://localhost:8080/oauth2callback'
+        redirect_uri='https://smartscheduler-pknn.onrender.com/oauth2callback'
     )
     
     auth_url, state = flow.authorization_url(

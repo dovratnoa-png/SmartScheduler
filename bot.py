@@ -64,7 +64,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     events = list_events(user_id)
     
     if events is None:
-        login_url = f"http://localhost:8080/login/{user_id}"
+        login_url = f"https://smartscheduler-pknn.onrender.com/login/{user_id}"
         await update.message.reply_text(
             f"היי! איזה כיף שבאת. 📅\n"
             f"נראה שעוד לא חיברת את היומן שלך. כדי שאוכל להתחיל לעזור לך עם הלו\"ז, צריך לאשר גישה באופן חד-פעמי בלינק הבא:\n"
