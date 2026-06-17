@@ -1,0 +1,6 @@
+python-telegram-bot
+anthropic
+google-api-python-client
+google-auth-oauthlib
+flask
+python-dotenv
