@@ -86,20 +86,37 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(welcome_text, parse_mode='HTML')
 
 async def choose_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.effective_user.id)
+    # אנחנו צריכות לדעת אם זה הגיע מפקודה או מכפתור, אז נשתמש ב-update.callback_query אם קיים
+    if update.callback_query:
+        await update.callback_query.answer()
+        user_id = str(update.callback_query.message.chat_id)
+        reply_func = update.callback_query.message.reply_text
+    else:
+        user_id = str(update.effective_user.id)
+        reply_func = update.message.reply_text
+
     calendars = list_user_calendars(user_id)
-    
     if not calendars:
-        await update.message.reply_text("עוד לא התחברת לגוגל, או שלא מצאתי יומנים בחשבון הזה.")
+        await reply_func("עוד לא התחברת לגוגל, או שלא מצאתי יומנים בחשבון הזה.")
         return
 
     context.user_data['all_calendars'] = calendars
     if 'selected_calendars' not in context.user_data:
         context.user_data['selected_calendars'] = []
 
-    reply_markup = build_calendar_keyboard(context.user_data['all_calendars'], context.user_data['selected_calendars'])
-    await update.message.reply_text("בחרי את היומנים שתרצי שאקרא ואנהל (אפשר לבחור כמה), ובסוף לחצי על 'סיימתי':", reply_markup=reply_markup)
+    # ההסבר המפורט שביקשת:
+    explainer_text = (
+        "<b>בוא נגדיר את היומנים שלך:</b>\n\n"
+        "1. <b>קריאה:</b> בחר את היומנים שמהם אני צריך לקרוא נתונים (כדי שאוכל לראות הכל ולמנוע התנגשויות בלו״ז).\n"
+        "2. <b>כתיבה חכמה:</b> כשנרצה לקבוע אירוע חדש, אני (ה-AI) אנתח לפי ההקשר לאיזה יומן הכי מתאים להוסיף אותו (עבודה, לימודים, אישי וכו').\n"
+        "3. <b>שקיפות:</b> אני תמיד אציג לך לפני אישור לאיזה יומן אני מתכנן להוסיף את האירוע, כדי שתוכל לוודא שזה מתאים לך. 🛡️\n\n"
+        "סמן את היומנים הרצויים ולחץ על 'סיימתי'."
+    )
 
+    reply_markup = build_calendar_keyboard(context.user_data['all_calendars'], context.user_data['selected_calendars'])
+    await reply_func(explainer_text, reply_markup=reply_markup, parse_mode='HTML')
+
+    
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     user_text = update.message.text

@@ -1,6 +1,23 @@
 import os
+import requests
 from flask import Flask, request
 from google_auth_oauthlib.flow import Flow
+
+def notify_user_login_success(user_id):
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+    if not bot_token: return
+    
+    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    payload = {
+        "chat_id": user_id,
+        "text": "חיבור ה-Google Calendar הצליח! 🎉\nעכשיו בוא נגדיר את היומנים שלך.",
+        "reply_markup": {
+            "inline_keyboard": [[
+                {"text": "התחל הגדרת יומנים 🗓️", "callback_data": "start_calendar_setup"}
+            ]]
+        }
+    }
+    requests.post(url, json=payload)
 
 app = Flask(__name__)
 
@@ -28,7 +45,6 @@ def login(user_id):
     prompt='consent'
 )
     
-    # הקסם החדש: שומרים את האובייקט בזיכרון של השרת תחת ה-ID של המשתמש!
     active_flows[user_id] = flow
     
     return f'<h2 style="font-family: Arial; text-align: center; margin-top: 50px;">היי! כדי לחבר את הבוט, <a href="{auth_url}">לחצי כאן לאישור גישה ליומן</a></h2>'
@@ -48,7 +64,7 @@ def oauth2callback():
     creds = flow.credentials
     with open(f'token_{user_id}.json', 'w') as token_file:
         token_file.write(creds.to_json())
-        
+    notify_user_login_success(user_id) 
     return '<h2 style="font-family: Arial; text-align: center; color: green; margin-top: 50px;">✅ ההתחברות עברה בהצלחה! אפשר לסגור את החלון ולחזור לטלגרם.</h2>'
 
 if __name__ == '__main__':
