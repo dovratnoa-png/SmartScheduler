@@ -116,7 +116,7 @@ async def choose_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = build_calendar_keyboard(context.user_data['all_calendars'], context.user_data['selected_calendars'])
     await reply_func(explainer_text, reply_markup=reply_markup, parse_mode='HTML')
 
-    
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     user_text = update.message.text
@@ -213,6 +213,10 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     data = query.data
 
+    if data == "start_calendar_setup":
+        await choose_calendar(update, context)
+        return
+        
     # --- לוגיקת בחירת יומנים ---
     if data == "finish_selection":
         selected = context.user_data.get('selected_calendars', [])
