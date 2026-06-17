@@ -23,9 +23,11 @@ chat_histories = {}
 # === פונקציית עזר לבניית מקלדת היומנים ===
 def build_calendar_keyboard(calendars, selected_ids):
     keyboard = []
-    for cal in calendars:
+    # אנחנו משתמשים ב-enumerate כדי לקבל מספר סידורי (i) לכל יומן
+    for i, cal in enumerate(calendars):
         text = f"✅ {cal['summary']}" if cal['id'] in selected_ids else cal['summary']
-        keyboard.append([InlineKeyboardButton(text, callback_data=f"cal_{cal['id']}")])
+        keyboard.append([InlineKeyboardButton(text, callback_data=f"cal_{i}")])
+        
     keyboard.append([InlineKeyboardButton("🏁 סיימתי לבחור", callback_data="finish_selection")])
     return InlineKeyboardMarkup(keyboard)
 
@@ -75,12 +77,12 @@ def get_system_prompt(events_context, calendars_text):
 # === פקודות בוט ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = (
-        "היי! 👋 כיף שבאת :) \nאני לא סתם יומן, אני העוזר האישי שלך:)\n"
-        "בקרוב (אחרי שתאשר לי) אהיה מחובר ללו״ז שלך (Google Calendar) ולמשימות שלך (Google Tasks) ואתחיל לארגן, להכניס ולייעץ לך איך לנהל את הזמן נכון.\n\n"
+        "היי! 👋 כיף שבאת :) \nאני לא סתם יומן, אני העוזר האישי שלך \n\n"
+        "בקרוב (אחרי שתאשר לי) אהיה מחובר ללו״ז שלך(Google Calendar) ולמשימות שלך (Google Tasks) ואתחיל לארגן, להכניס ולייעץ לך איך לנהל את הזמן נכון.\n\n"
         "הנה כמה דברים שאפשר לבקש ממני:\n"
         "📅 <b>סיכום חכם:</b> 'מה הלו״ז שלי מחר? איפה יש לי אוויר לנשום?'\n"
         "⚡️ <b>פעולות מהירות:</b> 'תקבע לי פגישה עם הצוות מחר ב-10:00.'\n"
-        "🧠 <b>ייעוץ ותכנון מורכב:</b> 'אני חייבת למצוא מחר שעה וחצי לסיים עבודה להגשה וממש רוצה גם להכניס אימון. איך אוכל לעשות את זה בצורה הכי אידיאלית? \n אם צריך - אציע לך אילו פגישות ואירועים כדאי להזיז ליום ראשון. אגב, אם אני חושב שאת צריכה לשריין זמן עבודה על מטלות נוספות לפי הדד-ליינים שלהן שאני רואה - אני אגיד לך:)'\n\n"
+        "🧠 <b>ייעוץ ותכנון מורכב:</b> 'אני חייבת למצוא מחר שעה וחצי כדי לסיים עבודה להגשה וממש רוצה גם להכניס אימון. איך אוכל לעשות את זה בצורה הכי אידיאלית'? \n אם צריך - אגיד לך אילו אירועים כדאי להזיז ליום אחר, ואם אני רואה שאת צריכה לשריין זמן עבודה על מטלות נוספות לפי הדד-ליינים שלהן. ועוד טיפים כאלה - אני אגיד לך:)\n\n"
         "כדי להתחיל, פשוט תכתבי לי הודעה. אם עדיין לא התחברת ליומן - מיד אשלח לך לינק!"
     )
     await update.message.reply_text(welcome_text, parse_mode='HTML')
@@ -126,8 +128,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if events is None:
         login_url = f"https://smartscheduler-pknn.onrender.com/login/{user_id}"
         await update.message.reply_text(
-            f"היי:) איזה כיף שבאת 📅\n"
-            f"נראה שעוד לא חיברת את היומן שלך. כדי שאוכל להתחיל לעזור לך עם הלו\"ז, צריך לאשר גישה באופן חד-פעמי בלינק הבא:\n"
+            f"נדיר! 📅\n"
+            f"כדי שאוכל להתחיל לעזור לך עם הלו\"ז, צריך לאשר גישה באופן חד-פעמי בלינק הבא (זה מאובטח):\n"
             f"{login_url}"
         )
         return 
@@ -226,19 +228,24 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(f"מעולה! שמרתי {len(selected)} יומנים בהצלחה. 🚀\nמעכשיו אנתח לאיזה יומן כל משימה שייכת.")
         return
 
-    if data.startswith("cal_"):
-        cal_id = data.replace("cal_", "")
-        selected = context.user_data.get('selected_calendars', [])
-        
-        if cal_id in selected:
-            selected.remove(cal_id)
-        else:
-            selected.append(cal_id)
-            
-        context.user_data['selected_calendars'] = selected
+   if data.startswith("cal_"):
+        # שולפים את המספר הסידורי של היומן מתוך הכפתור
+        cal_index = int(data.replace("cal_", ""))
         calendars = context.user_data.get('all_calendars', [])
-        reply_markup = build_calendar_keyboard(calendars, selected)
-        await query.edit_message_reply_markup(reply_markup=reply_markup)
+        
+        # מוודאים שהמספר תקין
+        if cal_index < len(calendars):
+            cal_id = calendars[cal_index]['id'] # שולפים את ה-ID האמיתי והארוך מהזיכרון
+            selected = context.user_data.get('selected_calendars', [])
+            
+            if cal_id in selected:
+                selected.remove(cal_id)
+            else:
+                selected.append(cal_id)
+                
+            context.user_data['selected_calendars'] = selected
+            reply_markup = build_calendar_keyboard(calendars, selected)
+            await query.edit_message_reply_markup(reply_markup=reply_markup)
         return
 
     # --- לוגיקת אישור/ביטול אירועים ---
