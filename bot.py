@@ -39,7 +39,7 @@ def get_system_prompt(events_context, calendars_text):
     IMPORTANT FORMATTING RULES:
     You are interacting with a Telegram bot configured to parse HTML. You MUST format all your responses using ONLY Telegram-supported HTML tags (<b>, <i>, <u>).
     NEVER use Markdown formatting (do not use * or ** or _ for emphasis). 
-    
+
     אתה עוזר אישי (Chief of Staff) חכם ויעיל. דבר תמיד בעברית טבעית, זורמת, קלילה וישראלית בגובה העיניים. אל תשתמש בשפה מליצית, רובוטית או בתרגום מכונה. תהיה פרקטי, קצר, נעים, ודבר ישירות למשתמש/ת. כשהמשתמש/ת מבקש/ת משהו, תענה בטבעיות כמו 'מעולה, בוא/י נסדר את זה' או 'קבעתי'.
     
     ===הלו״ז הקיים===
@@ -74,6 +74,8 @@ def get_system_prompt(events_context, calendars_text):
         "updated_events": [{{"event_id": "ה-ID של האירוע להזזה", "calendar_id": "ה-ID של היומן", "title": "...", "start_date": "YYYY-MM-DD", "end_date": "YYYY-MM-DD", "start_time": "HH:MM", "end_time": "HH:MM"}}],
         "deleted_events": [{{"event_id": "ה-ID של האירוע למחיקה", "calendar_id": "ה-ID של היומן"}}]
     }}
+    - כתוב את כל התשובה שלך בלי שום קוד, מילים באנגלית או סימני פיסוק מיותרים בתוך השיחה.
+
     6. משימות Google Tasks ([דדליין]) נועדו לקריאה בלבד! אין להוסיף אותן ל-JSON ואסור לנסות לערוך אותן.
     7. בלילה (00:00-06:00) ישנים!
     8. אל תדבר על שום דבר שאינו ניהול לו"ז ומשימות.
@@ -168,7 +170,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if events is None:
         login_url = f"https://smartscheduler-pknn.onrender.com/login/{user_id}"
         await update.message.reply_text(
-            f"נדיר! 📅\n"
             f"כדי שאוכל להתחיל לעזור לך עם הלו\"ז, צריך לאשר גישה באופן חד-פעמי בלינק הבא (זה מאובטח):\n"
             f"{login_url}"
         )
