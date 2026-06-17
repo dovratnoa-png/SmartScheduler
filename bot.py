@@ -177,7 +177,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     try:
         message = client.messages.create(
-            model="cclaude-sonnet-4-6", 
+            model="claude-sonnet-4-6", 
             max_tokens=1000,
             system=get_system_prompt(events_context, calendars_text),
             messages=chat_histories[user_id] 
