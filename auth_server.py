@@ -2,20 +2,24 @@ import os
 import requests
 from flask import Flask, request
 from google_auth_oauthlib.flow import Flow
+import
 
 def notify_user_login_success(user_id):
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
-    if not bot_token: return
+    if not bot_token:
+        return
     
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    
+    # 2. כאן השינוי: עוטפים את ה-reply_markup ב-json.dumps
     payload = {
         "chat_id": user_id,
-        "text": "חיבור ה-Google Calendar הצליח! 🎉\nעכשיו בוא נגדיר את היומנים שלך.",
-        "reply_markup": {
+        "text": "חיבור ה-Google Calendar הצליח! 🎉\nעכשיו בוא נגדיר את היומנים שלך באופן חד-פעמי כדי שאוכל לעזור לך לתכנן את הלו״ז.",
+        "reply_markup": json.dumps({
             "inline_keyboard": [[
                 {"text": "התחל הגדרת יומנים 🗓️", "callback_data": "start_calendar_setup"}
             ]]
-        }
+        })
     }
     requests.post(url, json=payload)
 
