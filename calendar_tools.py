@@ -27,14 +27,12 @@ def list_events(user_id, calendar_ids=None):
     if not service:
         return None
         
-    # אם לא קיבלנו רשימת יומנים ספציפית, נשתמש בראשי כברירת מחדל
     if not calendar_ids:
         calendar_ids = ['primary']
         
     now = datetime.utcnow().isoformat() + 'Z'
     all_events = []
     
-    # עוברים על כל יומן שהמשתמש בחר ואוספים ממנו את האירועים
     for cal_id in calendar_ids:
         try:
             events_result = service.events().list(
@@ -44,13 +42,17 @@ def list_events(user_id, calendar_ids=None):
                 orderBy='startTime'
             ).execute()
             
-            all_events.extend(events_result.get('items', []))
+            items = events_result.get('items', [])
+            
+            # הנה השינוי: לוקחים כל אירוע ומוסיפים לו שדה שמציין מאיזה יומן הוא הגיע
+            for item in items:
+                item['calendar_id'] = cal_id
+                
+            all_events.extend(items)
         except Exception as e:
             print(f"Error reading calendar {cal_id}: {e}")
             
-    # בגלל שאספנו אירועים מכמה יומנים שונים, צריך למיין אותם מחדש לפי השעה
     def get_start_time(event):
-        # מנסה למשוך שעה מדויקת, ואם זה אירוע של יום שלם - מושך רק תאריך
         return event['start'].get('dateTime', event['start'].get('date'))
         
     all_events.sort(key=get_start_time)
@@ -169,3 +171,37 @@ def list_user_calendars(user_id):
     except Exception as e:
         print(f"Error fetching calendars: {e}")
         return None        
+
+
+def delete_event(user_id, calendar_id, event_id):
+    """מוחק אירוע קיים מגוגל קלנדר"""
+    try:
+        creds = get_credentials(user_id) # משתמש בפונקציה הקיימת שלך לשליפת הטוקן
+        service = build('calendar', 'v3', credentials=creds)
+        
+        service.events().delete(calendarId=calendar_id, eventId=event_id).execute()
+        return True, "האירוע נמחק בהצלחה."
+    except Exception as e:
+        print(f"Error deleting event: {e}")
+        return False, f"שגיאה במחיקת האירוע: {str(e)}"
+
+def update_event_time(user_id, calendar_id, event_id, new_start_iso, new_end_iso):
+    """מעדכן שעות של אירוע קיים (הזזת אירוע)"""
+    try:
+        creds = get_credentials(user_id)
+        service = build('calendar', 'v3', credentials=creds)
+        
+        # 1. קודם שולפים את האירוע הקיים כדי לא לדרוס לו נתונים אחרים (כמו מיקום או משתתפים)
+        event = service.events().get(calendarId=calendar_id, eventId=event_id).execute()
+        
+        # 2. מעדכנים רק את שעת ההתחלה והסיום
+        event['start'] = {'dateTime': new_start_iso}
+        event['end'] = {'dateTime': new_end_iso}
+        
+        # 3. דוחפים את העדכון חזרה לגוגל
+        updated_event = service.events().update(calendarId=calendar_id, eventId=event_id, body=event).execute()
+        
+        return True, updated_event.get('summary', 'אירוע ללא שם')
+    except Exception as e:
+        print(f"Error updating event: {e}")
+        return False, str(e)
