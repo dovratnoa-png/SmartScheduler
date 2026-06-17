@@ -51,5 +51,6 @@ def oauth2callback():
     return '<h2 style="font-family: Arial; text-align: center; color: green; margin-top: 50px;">✅ ההתחברות עברה בהצלחה! אפשר לסגור את החלון ולחזור לטלגרם.</h2>'
 
 if __name__ == '__main__':
-    print("🚀 שרת ההתחברות רץ על פורט 8080...")
-    app.run(port=8080, debug=True)
+    import os
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
