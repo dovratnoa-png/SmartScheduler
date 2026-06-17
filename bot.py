@@ -207,7 +207,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
     except Exception as e:
         print(f"❌ שגיאה: {e}")
-        await update.message.reply_text("משהו השתבש בתקשורת עם ה-AI.")
+        await update.message.reply_text(f"משהו השתבש בתקשורת עם ה-AI.\nהשגיאה המדויקת היא:\n`{str(e)}`", parse_mode='Markdown')
 
 async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -223,9 +223,16 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == "finish_selection":
         selected = context.user_data.get('selected_calendars', [])
         if not selected:
-            await query.edit_message_text("לא בחרת אף יומן. אעבוד עם היומן הראשי (Primary) כברירת מחדל.")
+            await query.edit_message_text(
+                "לא בחרת אף יומן. אעבוד עם היומן הראשי (Primary) כברירת מחדל.\n\n"
+                "אז מה התוכניות שלנו? מוזמנת לכתוב לי איך תרצי שאסייע! 🗓️"
+            )
         else:
-            await query.edit_message_text(f"מעולה! שמרתי {len(selected)} יומנים בהצלחה. 🚀\nמעכשיו אנתח לאיזה יומן כל משימה שייכת.")
+            await query.edit_message_text(
+                f"מעולה! שמרתי {len(selected)} יומנים בהצלחה. 🚀\n"
+                f"מעכשיו אנתח לאיזה יומן כל משימה שייכת.\n\n"
+                f"אז... מה בא לך לתכנן? אפשר לבקש ממני למצוא זמן ללימודים או לאימון, לקבוע פגישות, או פשוט לשאול 'מה הלו״ז שלי מחר?' 🗓️"
+            )
         return
 
     if data.startswith("cal_"):
