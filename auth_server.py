@@ -14,7 +14,7 @@ def notify_user_login_success(user_id):
     # 2. כאן השינוי: עוטפים את ה-reply_markup ב-json.dumps
     payload = {
         "chat_id": user_id,
-        "text": "חיבור ה-Google Calendar הצליח! 🎉\nעכשיו בוא נגדיר את היומנים שלך באופן חד-פעמי כדי שאוכל לעזור לך לתכנן את הלו״ז.",
+        "text": "החיבור ל-Google הצליח 🎉\nעכשיו בוא נגדיר את היומנים שלך באופן חד-פעמי כדי שאוכל לעזור לך לתכנן את הלו״ז.",
         "reply_markup": json.dumps({
             "inline_keyboard": [[
                 {"text": "התחל הגדרת יומנים 🗓️", "callback_data": "start_calendar_setup"}

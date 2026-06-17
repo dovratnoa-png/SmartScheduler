@@ -1,6 +1,6 @@
 import os
 import os.path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
@@ -76,21 +76,37 @@ def create_event(user_id, summary, start_time, end_time, calendar_id='primary'):
     return service.events().insert(calendarId=calendar_id, body=event).execute()
 
 def is_overlap(new_start_iso, new_end_iso, existing_events):
-    new_start = datetime.fromisoformat(new_start_iso.replace('Z', ''))
-    new_end = datetime.fromisoformat(new_end_iso.replace('Z', ''))
+    # פונקציית עזר שמתקנת את אזורי הזמן בלי לשבור כלום
+    def parse_dt(iso_str):
+        # אם זה אירוע של יום שלם (רק תאריך כמו "2026-06-18"), נוסיף לו חצות כדי שפייתון יוכל להשוות
+        if len(iso_str) == 10:
+            iso_str += "T00:00:00"
+            
+        dt = datetime.fromisoformat(iso_str.replace('Z', '+00:00'))
+        
+        # אם חסר אזור זמן, מגדירים אותו כ-UTC כדי למנוע את שגיאת ה-offset
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+
+    new_start = parse_dt(new_start_iso)
+    new_end = parse_dt(new_end_iso)
 
     for e in existing_events:
+        # הלוגיקה שלך: לוקחים גם dateTime וגם date!
         start_val = e['start'].get('dateTime') or e['start'].get('date')
         end_val = e['end'].get('dateTime') or e['end'].get('date')
         
         if not start_val or not end_val:
             continue 
             
-        e_start = datetime.fromisoformat(start_val.replace('Z', ''))
-        e_end = datetime.fromisoformat(end_val.replace('Z', ''))
+        e_start = parse_dt(start_val)
+        e_end = parse_dt(end_val)
 
         if new_start < e_end and new_end > e_start:
+            # הלוגיקה שלך: מחזירים את ה-summary!
             return True, e['summary']
+            
     return False, None
 
 
