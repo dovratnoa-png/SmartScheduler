@@ -6,9 +6,7 @@ from anthropic import AsyncAnthropic
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
-from threading import Thread  # נוסף לטובת השרת של Render
 from calendar_tools import list_user_calendars, create_event, list_events, is_overlap, list_tasks, delete_event, update_event_time
-from auth_server import app as flask_app
 
 load_dotenv() 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -454,12 +452,7 @@ def run_web_server():
 
 
 if __name__ == '__main__':
-    # הפעלת שרת האינטרנט ברקע ב-Thread נפרד כדי שלא יחסום את הבוט
-    server_thread = Thread(target=run_web_server)
-    server_thread.daemon = True 
-    server_thread.start()
-
-    # שינינו את השם ל-telegram_app כדי למנוע התנגשות עם השרת
+    
     telegram_app = ApplicationBuilder().token(BOT_TOKEN).build()
     telegram_app.add_handler(CommandHandler("start", start))
     telegram_app.add_handler(CommandHandler("calendars", choose_calendar)) 
