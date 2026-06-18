@@ -237,12 +237,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             json_str = match.group(0)
             try:
                 data = json.loads(json_str)
-                # במקום לשמור רק יצירה, אנחנו שומרים את כל בלוק הפעולות בזיכרון!
                 if 'pending_actions' not in context.user_data:
                     context.user_data['pending_actions'] = {}
                 context.user_data['pending_actions'][user_id] = data
                 
-                clean_text = bot_reply.replace(json_str, "").strip()
+                # --- חיתוך אגרסיבי ונקי ---
+                # מוצאים את המיקום המדויק שבו ה-JSON (הסוגר המסולסל הראשון) מתחיל
+                json_start_idx = bot_reply.find('{')
+                # לוקחים רק את מה שקורה לפני ה-JSON
+                clean_text = bot_reply[:json_start_idx].strip()
+                
+                # מנקים באופן מוחלט שאריות כמו גרשים או המילה json שנותרו ממש לפני ה-JSON
+                for garbage in ["```json", "```", "json:", "json"]:
+                    if clean_text.endswith(garbage):
+                        clean_text = clean_text[:-len(garbage)].strip()
+                # --------------------------
+                
                 keyboard = [
                     [InlineKeyboardButton("✅ אשר שינויים ביומן", callback_data='confirm')],
                     [InlineKeyboardButton("❌ עזוב, בטל", callback_data='cancel')]
