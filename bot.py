@@ -2,17 +2,20 @@ import os
 import json
 import re
 from datetime import datetime
-import anthropic
+from anthropic import AsyncAnthropic  # שודרג לקליינט א-סינכרוני
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
+from threading import Thread  # נוסף לטובת השרת של Render
 from calendar_tools import list_user_calendars, create_event, list_events, is_overlap, list_tasks, delete_event, update_event_time
+from auth_server import app as flask_app
 
 load_dotenv() 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CLAUDE_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 
-client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
+# מעבר לקליינט הא-סינכרוני כדי לאפשר למספר משתמשים לדבר במקביל
+client = AsyncAnthropic(api_key=CLAUDE_API_KEY)
 
 pending_schedules = {}
 chat_histories = {} 
@@ -240,7 +243,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     events_context += "\n".join(deadlines) if deadlines else "אין דדליינים כרגע."
     
     try:
-        message = client.messages.create(
+        # הקריאה לקלוד הפכה לא-סינכרונית עם הפקודה await
+        message = await client.messages.create(
             model="claude-sonnet-4-6", 
             max_tokens=1000,
             system=get_system_prompt(events_context, calendars_text),
@@ -417,10 +421,25 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
             del context.user_data['pending_actions'][user_id]
         await query.edit_message_text("❌ בוטל. הלו\"ז נשאר כמו שהיה.")
 
+
+# === פונקציית השרת ברקע לטובת Render ===
+def run_web_server():
+    port = int(os.environ.get("PORT", 5000))
+    # ודאי שהמשתנה flask_app שהבאנו בתחילת הקובץ אכן מוגדר נכון
+    flask_app.run(host="0.0.0.0", port=port)
+
+
 if __name__ == '__main__':
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("calendars", choose_calendar)) # הפקודה החדשה!
-    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
-    app.add_handler(CallbackQueryHandler(button_click))
-    app.run_polling()
+    # הפעלת שרת האינטרנט ברקע ב-Thread נפרד כדי שלא יחסום את הבוט
+    server_thread = Thread(target=run_web_server)
+    server_thread.daemon = True 
+    server_thread.start()
+
+    # שינינו את השם ל-telegram_app כדי למנוע התנגשות עם השרת
+    telegram_app = ApplicationBuilder().token(BOT_TOKEN).build()
+    telegram_app.add_handler(CommandHandler("start", start))
+    telegram_app.add_handler(CommandHandler("calendars", choose_calendar)) 
+    telegram_app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
+    telegram_app.add_handler(CallbackQueryHandler(button_click))
+    
+    telegram_app.run_polling()
