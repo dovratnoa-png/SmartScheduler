@@ -224,7 +224,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_histories[user_id] = []
         
     chat_histories[user_id].append({"role": "user", "content": user_text})
-    chat_histories[user_id] = chat_histories[user_id][-5:] 
+    chat_histories[user_id] = chat_histories[user_id][-10:] 
     
     regular_events = []
     deadlines = []
