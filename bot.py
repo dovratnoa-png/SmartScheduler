@@ -56,7 +56,7 @@ def get_system_prompt(events_context, calendars_text):
     - ״השבוע״ יסתיים ביום שבת הקרוב.
     - יום ראשון הקרוב הוא כבר בשבוע הבא. כשמדברים על השבוע הנוכחי, יום ראשון הקרוב לא נחשב בשבוע הנוכחי
     - בשעות הלילה 00:00-06:00 ישנים! לא להציע דברים כמו לימודים או אימונים לשעות האלה. רק אם המשתמש/ת מבקש/ת ממך ישירות לקבוע שם אירוע.
-
+    - שים לב להבדל בין אירועים לדדליינים: אירועים חוסמים זמן בלו"ז. דדליינים (משימות) הם רק נקודות ציון - הם לא תופסים זמן אמיתי ביום ואפשר לקבוע אירועים
     
 
     ===חוקי ברזל לעבודה===
@@ -199,30 +199,49 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_histories[user_id].append({"role": "user", "content": user_text})
     chat_histories[user_id] = chat_histories[user_id][-5:] 
     
-    events_str_list = []
+    regular_events = []
+    deadlines = []
+    
     for e in existing_events:
-        # שולפים את ה-IDs בבטחה
         cal_id = e.get('calendar_id', 'primary')
         event_id = e.get('id', 'unknown_id')
+        title = e.get('summary', 'ללא נושא')
 
-        if 'dateTime' in e['start']:
-            start_str = e['start'].get('dateTime')
-            end_str = e['end'].get('dateTime')
+        # שולפים בבטחה את הנתונים כדי למנוע קריסות
+        start_data = e.get('start', {})
+
+        if 'dateTime' in start_data:
+            start_str = start_data.get('dateTime')
+            end_str = e.get('end', {}).get('dateTime', '')
             try:
                 start_dt = datetime.fromisoformat(start_str.replace('Z', ''))
                 end_dt = datetime.fromisoformat(end_str.replace('Z', ''))
-                time_format = f"בתאריך {start_dt.strftime('%d/%m/%Y')} משעה {start_dt.strftime('%H:%M')} עד {end_dt.strftime('%H:%M')}"
-                events_str_list.append(f"- אירוע: {e['summary']} | ID: {event_id} | יומן: {cal_id} ({time_format})")
+                
+                # --- קסם הדדליינים ---
+                # אם האירוע הוגדר מהשעה 00:00 עד 23:00/23:59, הבוט יבין שזה רק ציון דרך ולא חוסם את היום!
+                if start_dt.hour == 0 and start_dt.minute == 0 and end_dt.hour >= 23:
+                    deadlines.append(f"- 📌 [דדליין] {title} | ID: {event_id} | יומן: {cal_id} ({start_dt.strftime('%d/%m/%Y')})")
+                else:
+                    time_format = f"בתאריך {start_dt.strftime('%d/%m/%Y')} משעה {start_dt.strftime('%H:%M')} עד {end_dt.strftime('%H:%M')}"
+                    regular_events.append(f"- 📅 אירוע: {title} | ID: {event_id} | יומן: {cal_id} ({time_format})")
             except Exception:
-                events_str_list.append(f"- אירוע: {e['summary']} | ID: {event_id} | יומן: {cal_id} מ-{start_str} עד {end_str}")
+                # למקרה שהתאריך לא בפורמט צפוי
+                regular_events.append(f"- 📅 אירוע: {title} | ID: {event_id} | יומן: {cal_id} מ-{start_str} עד {end_str}")
         else:
-            events_str_list.append(f"- [דדליין/משימה] {e['summary']} | ID: {event_id} ב-{e['start'].get('date')}")
+            # אלו אירועי "יום שלם" אמיתיים או משימות בלי שעות בכלל
+            date_str = start_data.get('date', 'תאריך לא ידוע')
+            deadlines.append(f"- 📌 [דדליין/משימה] {title} | ID: {event_id} ב-{date_str}")
             
-    events_context = "\n".join(events_str_list)
+    # בונים את הטקסט לקלוד בשני בלוקים מופרדים לחלוטין
+    events_context = "=== אירועים ביומן (זמן תפוס) ===\n" 
+    events_context += "\n".join(regular_events) if regular_events else "אין אירועים."
+    
+    events_context += "\n\n=== משימות ודדליינים (לא תופסים זמן בלוז!) ===\n" 
+    events_context += "\n".join(deadlines) if deadlines else "אין דדליינים כרגע."
     
     try:
         message = client.messages.create(
-            model="claude-sonnet-4-6", 
+            model="claude-opus-4-8", 
             max_tokens=1000,
             system=get_system_prompt(events_context, calendars_text),
             messages=chat_histories[user_id] 

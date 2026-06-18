@@ -33,13 +33,11 @@ def list_events(user_id, calendar_ids=None):
     if not calendar_ids:
         calendar_ids = ['primary']
         
-    # --- התיקון שלנו: חישוב הזמן ל-21 ימים קדימה ---
     now_dt = datetime.utcnow()
     now = now_dt.isoformat() + 'Z'
     
     max_dt = now_dt + timedelta(days=21)
     time_max = max_dt.isoformat() + 'Z'
-    # ----------------------------------------------
     
     all_events = []
     
