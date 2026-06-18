@@ -410,7 +410,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
             success, msg = update_event_time(user_id, cal_id, event_id, new_start_iso=start_iso, new_end_iso=end_iso, new_summary=new_title)
             
             if success:
-                await query.message.reply_text(f"🔄 עודכן בהצלחה:\n<b>{msg}</b> (הוזז ל-{e['start_time']} עד {e['end_time']})", parse_mode='HTML')
+                await query.message.reply_text(f"🔄 עודכן בהצלחה:\n<b>{msg}</b> (מעודכן לשעות {e['start_time']}-{e['end_time']})", parse_mode='HTML')
             else:
                 await query.message.reply_text(f"⚠️ שגיאה בעדכון: {msg}")
 
