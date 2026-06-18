@@ -1,21 +1,43 @@
 import os
 import os.path
+import json
 from datetime import datetime, timedelta, timezone
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
+from pymongo import MongoClient
 
 SCOPES = ['https://www.googleapis.com/auth/calendar', 'https://www.googleapis.com/auth/tasks.readonly']
 
 CALENDAR_ID = os.getenv('CALENDAR_ID', 'primary')
 print(f"DEBUG: Using Calendar ID: {CALENDAR_ID}") 
+
+# חיבור לבסיס הנתונים MongoDB
+MONGO_URI = "mongodb+srv://dovratnoa_db_user:Noanoa123@cluster0.iiudde3.mongodb.net/?appName=Cluster0"
+mongo_client = MongoClient(MONGO_URI)
+db = mongo_client["smart_scheduler"]
+tokens_collection = db["tokens"]
+
 def get_credentials(user_id):
-    token_file = f'token_{user_id}.json'
-    if os.path.exists(token_file):
-        creds = Credentials.from_authorized_user_file(token_file, SCOPES)
-        if creds and creds.valid:
-            return creds
+    # שליפת הנתונים מתוך ה-MongoDB לפי ה-user_id של טלגרם
+    user_token = tokens_collection.find_one({"user_id": str(user_id)})
+    if user_token and "token" in user_token:
+        creds = Credentials.from_authorized_user_info(user_token["token"], SCOPES)
+        if creds:
+            if creds.valid:
+                return creds
+            # אם תוקף הטוקן פג אך קיים טוקן רענון, נרענן אותו אוטומטית ונשמור חזרה
+            elif creds.expired and creds.refresh_token:
+                try:
+                    creds.refresh(Request())
+                    tokens_collection.update_one(
+                        {"user_id": str(user_id)},
+                        {"$set": {"token": json.loads(creds.to_json())}}
+                    )
+                    return creds
+                except Exception as e:
+                    print(f"Error refreshing token for {user_id}: {e}")
     return None
 
 def get_calendar_service(user_id):
@@ -46,14 +68,13 @@ def list_events(user_id, calendar_ids=None):
             events_result = service.events().list(
                 calendarId=cal_id, 
                 timeMin=now,
-                timeMax=time_max,  # <--- ככה מעבירים את זה!
+                timeMax=time_max,
                 singleEvents=True,
                 orderBy='startTime'
             ).execute()
             
             items = events_result.get('items', [])
             
-            # לוקחים כל אירוע ומוסיפים לו שדה שמציין מאיזה יומן הוא הגיע
             for item in items:
                 item['calendar_id'] = cal_id
                 
@@ -87,15 +108,12 @@ def create_event(user_id, summary, start_time, end_time, calendar_id='primary'):
     return service.events().insert(calendarId=calendar_id, body=event).execute()
 
 def is_overlap(new_start_iso, new_end_iso, existing_events):
-    # פונקציית עזר שמתקנת את אזורי הזמן בלי לשבור כלום
     def parse_dt(iso_str):
-        # אם זה אירוע של יום שלם (רק תאריך כמו "2026-06-18"), נוסיף לו חצות כדי שפייתון יוכל להשוות
         if len(iso_str) == 10:
             iso_str += "T00:00:00"
             
         dt = datetime.fromisoformat(iso_str.replace('Z', '+00:00'))
         
-        # אם חסר אזור זמן, מגדירים אותו כ-UTC כדי למנוע את שגיאת ה-offset
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return dt
@@ -104,7 +122,6 @@ def is_overlap(new_start_iso, new_end_iso, existing_events):
     new_end = parse_dt(new_end_iso)
 
     for e in existing_events:
-        # הלוגיקה שלך: לוקחים גם dateTime וגם date!
         start_val = e['start'].get('dateTime') or e['start'].get('date')
         end_val = e['end'].get('dateTime') or e['end'].get('date')
         
@@ -115,18 +132,14 @@ def is_overlap(new_start_iso, new_end_iso, existing_events):
         e_end = parse_dt(end_val)
 
         if new_start < e_end and new_end > e_start:
-            # הלוגיקה שלך: מחזירים את ה-summary!
             return True, e['summary']
             
     return False, None
 
 
 def list_tasks(user_id):
-    token_file = f'token_{user_id}.json'
-    creds = None
-    
-    if os.path.exists(token_file):
-        creds = Credentials.from_authorized_user_file(token_file, SCOPES)
+    # שימוש ישיר בפונקציית ה-credentials המעודכנת של MongoDB
+    creds = get_credentials(user_id)
         
     if not creds or not creds.valid:
         print(f"⚠️ לא נמצאו הרשאות תקפות למשימות עבור משתמש {user_id}")
@@ -156,21 +169,16 @@ def list_tasks(user_id):
 
 
 def list_user_calendars(user_id):
-    """
-    שולף את כל היומנים של המשתמש מחשבון הגוגל שלו
-    """
     service = get_calendar_service(user_id)
     if not service:
         return None
     
     try:
-        # פנייה לגוגל לקבלת רשימת היומנים
         calendar_list = service.calendarList().list().execute()
         items = calendar_list.get('items', [])
         
         calendars = []
         for item in items:
-            # אנחנו שומרים רק את ה-ID ואת השם התצוגה של היומן
             calendars.append({
                 'id': item['id'],
                 'summary': item.get('summary', 'יומן ללא שם')
@@ -183,7 +191,6 @@ def list_user_calendars(user_id):
 
 
 def delete_event(user_id, calendar_id, event_id):
-    """מוחק אירוע קיים מגוגל קלנדר"""
     try:
         creds = get_credentials(user_id) 
         service = build('calendar', 'v3', credentials=creds)
@@ -195,19 +202,15 @@ def delete_event(user_id, calendar_id, event_id):
         return False, f"שגיאה במחיקת האירוע: {str(e)}"
 
 def update_event_time(user_id, calendar_id, event_id, new_start_iso, new_end_iso):
-    """מעדכן שעות של אירוע קיים (הזזת אירוע)"""
     try:
         creds = get_credentials(user_id)
         service = build('calendar', 'v3', credentials=creds)
         
-        # 1. קודם שולפים את האירוע הקיים כדי לא לדרוס לו נתונים אחרים (כמו מיקום או משתתפים)
         event = service.events().get(calendarId=calendar_id, eventId=event_id).execute()
         
-        # 2. מעדכנים רק את שעת ההתחלה והסיום
         event['start'] = {'dateTime': new_start_iso}
         event['end'] = {'dateTime': new_end_iso}
         
-        # 3. דוחפים את העדכון חזרה לגוגל
         updated_event = service.events().update(calendarId=calendar_id, eventId=event_id, body=event).execute()
         
         return True, updated_event.get('summary', 'אירוע ללא שם')

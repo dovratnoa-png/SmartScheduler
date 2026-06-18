@@ -93,9 +93,10 @@ def get_system_prompt(events_context, calendars_text):
     - רק כאשר המשתמש/ת אישר/ה מפורשות לקבוע או לשנות ביומן, הוסף את ה-JSON בסוף התשובה שלך.
     - אל תכתוב "קבעתי" אלא "הכנתי הכל. לחץ/י על הכפתור לאישור".
     - חובה למלא נתונים אמיתיים. אם אין צורך בפעולה מסוימת (למשל אין מחיקות), השאר את הרשימה ריקה [].
+    - שים לב לשדה 'override_overlap': אם זיהית שהמשתמש מבקש לקבוע אירוע על זמן שכבר תפוס, עליך להזהיר אותו בשיחה ("יש לך כבר את X בשעה הזו, לקבוע בכל זאת?"). רק אם אישר מפורשות להתעלם מההתנגשות, קבע את הערך ל-true. כברירת מחדל הערך הוא false.
     דוגמה למבנה המלא:
     {{
-        "scheduled_events": [{{"title": "...", "start_date": "YYYY-MM-DD", "end_date": "YYYY-MM-DD", "start_time": "HH:MM", "end_time": "HH:MM", "calendar_id": "ה-ID של היומן"}}],
+        "scheduled_events": [{{"title": "...", "start_date": "YYYY-MM-DD", "end_date": "YYYY-MM-DD", "start_time": "HH:MM", "end_time": "HH:MM", "calendar_id": "ה-ID של היומן", "override_overlap": false}}],
         "updated_events": [{{"event_id": "ה-ID של האירוע להזזה", "calendar_id": "ה-ID של היומן", "title": "...", "start_date": "YYYY-MM-DD", "end_date": "YYYY-MM-DD", "start_time": "HH:MM", "end_time": "HH:MM"}}],
         "deleted_events": [{{"event_id": "ה-ID של האירוע למחיקה", "calendar_id": "ה-ID של היומן"}}]
     }}
@@ -408,8 +409,11 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             overlap, conflict = is_overlap(start_iso, end_iso, existing_events)
             
-            if overlap:
-                await query.message.reply_text(f"⚠️ דילגתי על '{e['title']}' - מזהה התנגשות עם '{conflict}'")
+            # בודקים אם קלוד העביר את הסיסמה לעקוף את החסימה
+            override = e.get('override_overlap', False)
+            
+            if overlap and not override:
+                await query.message.reply_text(f"⚠️ דילגתי על '{e['title']}' - מזהה התנגשות עם '{conflict}'.\n(אם זה בכוונה, פשוט תכתב/י לי: 'תקבע בכל זאת').")
             else:
                 create_event(user_id, e['title'], start_iso, end_iso, calendar_id=target_cal_id) 
                 

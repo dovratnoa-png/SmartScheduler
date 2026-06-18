@@ -3,6 +3,13 @@ import requests
 from flask import Flask, request
 from google_auth_oauthlib.flow import Flow
 import json
+from pymongo import MongoClient
+
+# חיבור לבסיס הנתונים MongoDB
+MONGO_URI = "mongodb+srv://dovratnoa_db_user:Noanoa123@cluster0.iiudde3.mongodb.net/?appName=Cluster0"
+mongo_client = MongoClient(MONGO_URI)
+db = mongo_client["smart_scheduler"]
+tokens_collection = db["tokens"]
 
 def notify_user_login_success(user_id):
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -11,7 +18,6 @@ def notify_user_login_success(user_id):
     
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     
-    # 2. כאן השינוי: עוטפים את ה-reply_markup ב-json.dumps
     payload = {
         "chat_id": user_id,
         "text": "החיבור ל-Google הצליח 🎉\nעכשיו בוא נגדיר את היומנים שלך באופן חד-פעמי כדי שאוכל לעזור לך לתכנן את הלו״ז.",
@@ -43,11 +49,11 @@ def login(user_id):
     )
     
     auth_url, state = flow.authorization_url(
-    access_type='offline',
-    include_granted_scopes='true',
-    state=user_id,
-    prompt='consent'
-)
+        access_type='offline',
+        include_granted_scopes='true',
+        state=user_id,
+        prompt='consent'
+    )
     
     active_flows[user_id] = flow
     
@@ -57,7 +63,7 @@ def login(user_id):
 def oauth2callback():
     user_id = request.args.get('state') 
     
-    # שולפים את אותו אובייקט בדיוק שהתחיל את התהליך (במקום ליצור חדש)
+    # שולפים את אותו אובייקט בדיוק שהתחיל את התהליך
     flow = active_flows.get(user_id)
     
     if not flow:
@@ -66,8 +72,15 @@ def oauth2callback():
     flow.fetch_token(authorization_response=request.url)
     
     creds = flow.credentials
-    with open(f'token_{user_id}.json', 'w') as token_file:
-        token_file.write(creds.to_json())
+    
+    # המרה של ה-Credentials למילון JSON ושמירה ב-MongoDB
+    token_data = json.loads(creds.to_json())
+    tokens_collection.update_one(
+        {"user_id": str(user_id)},
+        {"$set": {"token": token_data}},
+        upsert=True
+    )
+    
     notify_user_login_success(user_id) 
     return '<h2 style="font-family: Arial; text-align: center; color: green; margin-top: 50px;">✅ ההתחברות עברה בהצלחה! אפשר לסגור את החלון ולחזור לטלגרם.</h2>'
 
