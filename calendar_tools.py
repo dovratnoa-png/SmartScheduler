@@ -201,16 +201,23 @@ def delete_event(user_id, calendar_id, event_id):
         print(f"Error deleting event: {e}")
         return False, f"שגיאה במחיקת האירוע: {str(e)}"
 
-def update_event_time(user_id, calendar_id, event_id, new_start_iso, new_end_iso):
+def update_event_time(user_id, calendar_id, event_id, new_start_iso=None, new_end_iso=None, new_summary=None):
     try:
         creds = get_credentials(user_id)
         service = build('calendar', 'v3', credentials=creds)
         
+        # 1. שולפים את האירוע הקיים מגוגל
         event = service.events().get(calendarId=calendar_id, eventId=event_id).execute()
         
-        event['start'] = {'dateTime': new_start_iso}
-        event['end'] = {'dateTime': new_end_iso}
+        # 2. מעדכנים רק את מה שהתקבל (אם התקבל)
+        if new_start_iso:
+            event['start'] = {'dateTime': new_start_iso}
+        if new_end_iso:
+            event['end'] = {'dateTime': new_end_iso}
+        if new_summary:
+            event['summary'] = new_summary
         
+        # 3. דוחפים את העדכון חזרה לגוגל
         updated_event = service.events().update(calendarId=calendar_id, eventId=event_id, body=event).execute()
         
         return True, updated_event.get('summary', 'אירוע ללא שם')

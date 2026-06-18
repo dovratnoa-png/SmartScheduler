@@ -405,7 +405,10 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
             start_iso = f"{e['start_date']}T{e['start_time']}:00+03:00"
             end_iso = f"{e['end_date']}T{e['end_time']}:00+03:00"
             
-            success, msg = update_event_time(user_id, cal_id, event_id, start_iso, end_iso)
+            new_title = e.get('title')
+            
+            success, msg = update_event_time(user_id, cal_id, event_id, new_start_iso=start_iso, new_end_iso=end_iso, new_summary=new_title)
+            
             if success:
                 await query.message.reply_text(f"🔄 עודכן בהצלחה:\n<b>{msg}</b> (הוזז ל-{e['start_time']} עד {e['end_time']})", parse_mode='HTML')
             else:
