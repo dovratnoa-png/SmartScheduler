@@ -24,7 +24,7 @@ def get_calendar_service(user_id):
         return None
     return build('calendar', 'v3', credentials=creds)
 
-    
+
 def list_events(user_id, calendar_ids=None):
     service = get_calendar_service(user_id)
     if not service:
@@ -33,7 +33,14 @@ def list_events(user_id, calendar_ids=None):
     if not calendar_ids:
         calendar_ids = ['primary']
         
-    now = datetime.utcnow().isoformat() + 'Z'
+    # --- התיקון שלנו: חישוב הזמן ל-21 ימים קדימה ---
+    now_dt = datetime.utcnow()
+    now = now_dt.isoformat() + 'Z'
+    
+    max_dt = now_dt + timedelta(days=21)
+    time_max = max_dt.isoformat() + 'Z'
+    # ----------------------------------------------
+    
     all_events = []
     
     for cal_id in calendar_ids:
@@ -41,13 +48,14 @@ def list_events(user_id, calendar_ids=None):
             events_result = service.events().list(
                 calendarId=cal_id, 
                 timeMin=now,
+                timeMax=time_max,  # <--- ככה מעבירים את זה!
                 singleEvents=True,
                 orderBy='startTime'
             ).execute()
             
             items = events_result.get('items', [])
             
-            # הנה השינוי: לוקחים כל אירוע ומוסיפים לו שדה שמציין מאיזה יומן הוא הגיע
+            # לוקחים כל אירוע ומוסיפים לו שדה שמציין מאיזה יומן הוא הגיע
             for item in items:
                 item['calendar_id'] = cal_id
                 
