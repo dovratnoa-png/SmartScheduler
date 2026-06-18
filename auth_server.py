@@ -6,7 +6,7 @@ import json
 from pymongo import MongoClient
 
 # חיבור לבסיס הנתונים MongoDB
-MONGO_URI = "mongodb+srv://dovratnoa_db_user:Noanoa123@cluster0.iiudde3.mongodb.net/?appName=Cluster0"
+MONGO_URI = os.getenv("MONGO_URI")
 mongo_client = MongoClient(MONGO_URI)
 db = mongo_client["smart_scheduler"]
 tokens_collection = db["tokens"]

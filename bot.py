@@ -7,11 +7,16 @@ from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from calendar_tools import list_user_calendars, create_event, list_events, is_overlap, list_tasks, delete_event, update_event_time
+from pymongo import MongoClient
 
 load_dotenv() 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CLAUDE_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 
+MONGO_URI = os.getenv("MONGO_URI")
+mongo_client = MongoClient(MONGO_URI)
+db = mongo_client["smart_scheduler"]
+tokens_collection = db["tokens"]
 # מעבר לקליינט הא-סינכרוני כדי לאפשר למספר משתמשים לדבר במקביל
 client = AsyncAnthropic(api_key=CLAUDE_API_KEY)
 
@@ -118,19 +123,31 @@ def get_system_prompt(events_context, calendars_text):
 # === פקודות בוט ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
-    token_file = f'token_{user_id}.json'
+    
+    # 1. שולפים את השם של המשתמש מטלגרם
+    first_name = update.effective_user.first_name or ""
+    last_name = update.effective_user.last_name or ""
+    full_name = f"{first_name} {last_name}".strip()
+    username = update.effective_user.username or "ללא יוזרניים"
 
-    # אם המשתמש כבר מחובר, אנחנו מדלגים על ההרשמה ישר לעבודה
-    if os.path.exists(token_file):
-        await update.message.reply_text("היי שוב! אנחנו כבר מחוברים ומסונכרנים. מה הלו״ז שלנו להיום? 🗓️")
+    # 2. מעדכנים או יוצרים את השורה של המשתמש במונגו עם השם שלו
+    tokens_collection.update_one(
+        {"user_id": user_id},
+        {"$set": {"name": full_name, "telegram_username": username}},
+        upsert=True
+    )
+
+    # 3. בודקים במונגו אם המשתמש כבר חיבר את היומן שלו
+    user_data = tokens_collection.find_one({"user_id": user_id})
+    if user_data and "token" in user_data:
+        await update.message.reply_text(f"היי {first_name}! אנחנו כבר מחוברים ומסונכרנים. מה הלו״ז שלנו להיום? 🗓️")
         return
 
-    # יצירת הלינק הייעודי למשתמש לשרת ה-Render שלך
+    # אם אין טוקן - מציגים את הודעת ההתחברות הרגילה
     login_url = f"https://smartscheduler-pknn.onrender.com/login/{user_id}"
 
-    # הטקסט המעודכן עם תגיות HTML להדגשה
     welcome_text = (
-        "היי! 👋 כיף שבאת :)\n\n"
+        f"היי {first_name}! 👋 כיף שבאת :)\n\n"
         "בקרוב (אם תאשר/י לי) אהיה מחובר ללו״ז שלך ולמשימות שלך דרך Google ואתחיל לארגן, להכניס ולייעץ לך איך לנהל את הזמן נכון.\n\n"
         "הנה דוגמה לדברים שאפשר לבקש ממני, אבל אני AI אז תרגיש/י חופשי לאתגר אותי:\n\n"
         "📅 <b>סיכום חכם:</b> 'מה הלו״ז שלי מחר? מתי יש לי זמן להתאוורר/ להכניס שיחה?'\n"
@@ -141,7 +158,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"כדי שנוכל להתחיל, <a href='{login_url}'>לחץ/י כאן לאישור החיבור ליומן</a> (זה מאובטח 🤓)."
     )
 
-    # שולחים את ההודעה עם HTML
     await update.message.reply_text(welcome_text, parse_mode='HTML')
 
 async def choose_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
