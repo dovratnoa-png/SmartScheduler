@@ -1,8 +1,8 @@
 import os
 import json
 import re
-from datetime import datetime
-from anthropic import AsyncAnthropic  # שודרג לקליינט א-סינכרוני
+from datetime import datetime, timedelta, timezone
+from anthropic import AsyncAnthropic  
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
@@ -33,11 +33,35 @@ def build_calendar_keyboard(calendars, selected_ids):
 
 # === פרומפט המערכת של קלוד ===
 def get_system_prompt(events_context, calendars_text):
-    now = datetime.now()
-    days = ["שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת", "ראשון"]
-    today_str = f"היום: יום {days[now.weekday()]}, {now.strftime('%d/%m/%Y')}. השעה הנוכחית היא: {now.strftime('%H:%M')}."
-
+    # 1. הגדרת שעון ישראל כדי שהשרת של Render לא יתבלבל בלילות
+    israel_tz = timezone(timedelta(hours=3))
+    now = datetime.now(israel_tz)
     
+    days = ["שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת", "ראשון"]
+    
+    # 2. בניית "שליף תאריכים" חכם לקלוד - כדי שלא יצטרך לחשב תאריכים לבד!
+    upcoming_dates = []
+    for i in range(7):
+        curr_date = now + timedelta(days=i)
+        day_name = days[curr_date.weekday()]
+        date_for_json = curr_date.strftime('%Y-%m-%d') # זה מה שחשוב ל-JSON!
+        date_for_display = curr_date.strftime('%d/%m/%Y')
+        
+        if i == 0:
+            upcoming_dates.append(f"- היום: יום {day_name} ({date_for_json})")
+        elif i == 1:
+            upcoming_dates.append(f"- מחר: יום {day_name} ({date_for_json})")
+        else:
+            upcoming_dates.append(f"- יום {day_name} ({date_for_json})")
+            
+    dates_cheat_sheet = "\n".join(upcoming_dates)
+    
+    today_str = (
+        f"השעה הנוכחית היא: {now.strftime('%H:%M')}.\n\n"
+        f"=== מפתח תאריכים לשבוע הקרוב (חובה להשתמש בתאריכים אלו ב-JSON!) ===\n"
+        f"{dates_cheat_sheet}"
+    )
+
     return f"""
     IMPORTANT FORMATTING RULES:
     You are interacting with a Telegram bot configured to parse HTML. You MUST format all your responses using ONLY Telegram-supported HTML tags (<b>, <i>, <u>).
