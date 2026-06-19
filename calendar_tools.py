@@ -46,7 +46,6 @@ def get_calendar_service(user_id):
         return None
     return build('calendar', 'v3', credentials=creds)
 
-
 def list_events(user_id, calendar_ids=None):
     service = get_calendar_service(user_id)
     if not service:
@@ -89,7 +88,7 @@ def list_events(user_id, calendar_ids=None):
     
     return all_events
 
-def create_event(user_id, summary, start_time, end_time, calendar_id='primary'):
+def create_event(user_id, summary, start_time, end_time, calendar_id='primary', location=None, disable_reminders=False):
     service = get_calendar_service(user_id)
     if not service:
         return "שגיאה בחיבור לגוגל" 
@@ -104,6 +103,12 @@ def create_event(user_id, summary, start_time, end_time, calendar_id='primary'):
         'start': {'dateTime': start_str},
         'end': {'dateTime': end_str},
     }
+    
+    if location:
+        event['location'] = location
+        
+    if disable_reminders:
+        event['reminders'] = {'useDefault': False, 'overrides': []}
     
     return service.events().insert(calendarId=calendar_id, body=event).execute()
 
@@ -136,7 +141,6 @@ def is_overlap(new_start_iso, new_end_iso, existing_events):
             
     return False, None
 
-
 def list_tasks(user_id):
     # שימוש ישיר בפונקציית ה-credentials המעודכנת של MongoDB
     creds = get_credentials(user_id)
@@ -167,7 +171,6 @@ def list_tasks(user_id):
         print(f"❌ שגיאה בשליפת משימות למשתמש {user_id}: {e}")
         return []
 
-
 def list_user_calendars(user_id):
     service = get_calendar_service(user_id)
     if not service:
@@ -189,7 +192,6 @@ def list_user_calendars(user_id):
         print(f"Error fetching calendars: {e}")
         return None        
 
-
 def delete_event(user_id, calendar_id, event_id):
     try:
         creds = get_credentials(user_id) 
@@ -201,7 +203,7 @@ def delete_event(user_id, calendar_id, event_id):
         print(f"Error deleting event: {e}")
         return False, f"שגיאה במחיקת האירוע: {str(e)}"
 
-def update_event_time(user_id, calendar_id, event_id, new_start_iso=None, new_end_iso=None, new_summary=None):
+def update_event_time(user_id, calendar_id, event_id, new_start_iso=None, new_end_iso=None, new_summary=None, new_location=None, disable_reminders=False):
     try:
         creds = get_credentials(user_id)
         service = build('calendar', 'v3', credentials=creds)
@@ -216,6 +218,12 @@ def update_event_time(user_id, calendar_id, event_id, new_start_iso=None, new_en
             event['end'] = {'dateTime': new_end_iso}
         if new_summary:
             event['summary'] = new_summary
+            
+        if new_location:
+            event['location'] = new_location
+            
+        if disable_reminders:
+            event['reminders'] = {'useDefault': False, 'overrides': []}
         
         # 3. דוחפים את העדכון חזרה לגוגל
         updated_event = service.events().update(calendarId=calendar_id, eventId=event_id, body=event).execute()

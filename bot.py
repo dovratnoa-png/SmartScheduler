@@ -65,7 +65,7 @@ def get_system_prompt(events_context, calendars_text):
         f"{dates_cheat_sheet}"
     )
 
-    return f"""
+  return f"""
     IMPORTANT FORMATTING RULES:
     You are interacting with a Telegram bot configured to parse HTML. You MUST format all your responses using ONLY Telegram-supported HTML tags (<b>, <i>, <u>).
     NEVER use Markdown formatting (do not use * or ** or _ for emphasis). 
@@ -79,8 +79,6 @@ def get_system_prompt(events_context, calendars_text):
     
     {calendars_text}
     
-
-
     ===זמן ולוח שנה ישראלי===
     שים לב היטב להגדרת השבועות בישראל. 
     - ״השבוע״ יסתיים ביום שבת הקרוב.
@@ -88,7 +86,6 @@ def get_system_prompt(events_context, calendars_text):
     - בשעות הלילה 00:00-06:00 ישנים! לא להציע דברים כמו לימודים או אימונים לשעות האלה. רק אם המשתמש/ת מבקש/ת ממך ישירות לקבוע שם אירוע.
     - שים לב להבדל בין אירועים לדדליינים: אירועים חוסמים זמן בלו"ז. דדליינים (משימות) הם רק נקודות ציון - הם לא תופסים זמן אמיתי ביום ואפשר לקבוע אירועים
     
-
     ===חוקי ברזל לעבודה===
     1. שים לב לשעה הנוכחית. לעולם אל תציע לשבץ אירועים היום בשעות שכבר עברו!
     2. תקציר יומי ודדליינים: חובה עליך להציג משפט תקציר על רמת העומס ולהזכיר דדליינים קרובים.
@@ -99,10 +96,12 @@ def get_system_prompt(events_context, calendars_text):
     - אל תכתוב "קבעתי" אלא "הכנתי הכל. לחץ/י על הכפתור לאישור".
     - חובה למלא נתונים אמיתיים. אם אין צורך בפעולה מסוימת (למשל אין מחיקות), השאר את הרשימה ריקה [].
     - שים לב לשדה 'override_overlap': אם זיהית שהמשתמש מבקש לקבוע אירוע על זמן שכבר תפוס, עליך להזהיר אותו בשיחה ("יש לך כבר את X בשעה הזו, לקבוע בכל זאת?"). רק אם אישר מפורשות להתעלם מההתנגשות, קבע את הערך ל-true. כברירת מחדל הערך הוא false.
+    - שדה 'location': המיקום שהמשתמש ציין (למשל 'אוניברסיטת תל אביב', 'זכרון יעקב' או 'סטודיו ליוגה'). אם לא צוין מיקום, השאר null.
+    - שדה 'disable_reminders': ערך בוליאני (true/false). ברירת המחדל היא true (כלומר, ליצור אירוע שקט ללא התראות). שנה ל-false אך ורק אם המשתמש/ת מבקש/ת מפורשות לשים התראה, תזכורת או נוטיפיקציה לאירוע הספציפי.    
     דוגמה למבנה המלא:
     {{
-        "scheduled_events": [{{"title": "...", "start_date": "YYYY-MM-DD", "end_date": "YYYY-MM-DD", "start_time": "HH:MM", "end_time": "HH:MM", "calendar_id": "ה-ID של היומן", "override_overlap": false}}],
-        "updated_events": [{{"event_id": "ה-ID של האירוע להזזה", "calendar_id": "ה-ID של היומן", "title": "...", "start_date": "YYYY-MM-DD", "end_date": "YYYY-MM-DD", "start_time": "HH:MM", "end_time": "HH:MM"}}],
+        "scheduled_events": [{{"title": "...", "start_date": "YYYY-MM-DD", "end_date": "YYYY-MM-DD", "start_time": "HH:MM", "end_time": "HH:MM", "calendar_id": "ה-ID של היומן", "override_overlap": false, "location": null, "disable_reminders": true}}],
+        "updated_events": [{{"event_id": "ה-ID של האירוע להזזה", "calendar_id": "ה-ID של היומן", "title": "...", "start_date": "YYYY-MM-DD", "end_date": "YYYY-MM-DD", "start_time": "HH:MM", "end_time": "HH:MM", "location": null, "disable_reminders": false}}],
         "deleted_events": [{{"event_id": "ה-ID של האירוע למחיקה", "calendar_id": "ה-ID של היומן"}}]
     }}
     - כתוב את כל התשובה שלך בלי שום קוד, מילים באנגלית או סימני פיסוק מיותרים בתוך השיחה.
@@ -284,7 +283,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         # הקריאה לקלוד הפכה לא-סינכרונית עם הפקודה await
         message = await client.messages.create(
-            model="claude-sonnet-4-6", 
+            model="claude-opus-4-8", 
             max_tokens=1000,
             system=get_system_prompt(events_context, calendars_text),
             messages=chat_histories[user_id] 
@@ -407,7 +406,18 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             new_title = e.get('title')
             
-            success, msg = update_event_time(user_id, cal_id, event_id, new_start_iso=start_iso, new_end_iso=end_iso, new_summary=new_title)
+            # שולפים את הנתונים החדשים (אם קלוד לא העביר, זה יהיה None/False)
+            new_location = e.get('location')
+            disable_reminders = e.get('disable_reminders', True)
+            
+            success, msg = update_event_time(
+                user_id, cal_id, event_id, 
+                new_start_iso=start_iso, 
+                new_end_iso=end_iso, 
+                new_summary=new_title,
+                new_location=new_location,
+                disable_reminders=disable_reminders
+            )
             
             if success:
                 await query.message.reply_text(f"🔄 עודכן בהצלחה:\n<b>{msg}</b> (מעודכן לשעות {e['start_time']}-{e['end_time']})", parse_mode='HTML')
@@ -434,7 +444,17 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if overlap and not override:
                 await query.message.reply_text(f"⚠️ דילגתי על '{e['title']}' - מזהה התנגשות עם '{conflict}'.\n(אם זה בכוונה, פשוט תכתב/י לי: 'תקבע בכל זאת').")
             else:
-                create_event(user_id, e['title'], start_iso, end_iso, calendar_id=target_cal_id) 
+                # שולפים נתונים חדשים לפני היצירה
+                location = e.get('location')
+                disable_reminders = e.get('disable_reminders', True)
+                
+                # מעבירים אותם לפונקציה המעודכנת
+                create_event(
+                    user_id, e['title'], start_iso, end_iso, 
+                    calendar_id=target_cal_id,
+                    location=location,
+                    disable_reminders=disable_reminders
+                )
                 
                 try:
                     start_date_obj = datetime.strptime(e['start_date'], "%Y-%m-%d")
