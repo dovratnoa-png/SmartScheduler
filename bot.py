@@ -65,7 +65,7 @@ def get_system_prompt(events_context, calendars_text):
         f"{dates_cheat_sheet}"
     )
 
-  return f"""
+    return f"""
     IMPORTANT FORMATTING RULES:
     You are interacting with a Telegram bot configured to parse HTML. You MUST format all your responses using ONLY Telegram-supported HTML tags (<b>, <i>, <u>).
     NEVER use Markdown formatting (do not use * or ** or _ for emphasis). 
