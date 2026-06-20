@@ -30,7 +30,9 @@ def notify_user_login_success(user_id):
     requests.post(url, json=payload)
 
 app = Flask(__name__)
-
+@app.route('/')
+def home():
+    return "Bot is awake!", 200
 # חובה כדי שנוכל לבדוק את זה לוקאלית
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
