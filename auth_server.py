@@ -5,7 +5,6 @@ from google_auth_oauthlib.flow import Flow
 import json
 from pymongo import MongoClient
 
-# חיבור לבסיס הנתונים MongoDB
 MONGO_URI = os.getenv("MONGO_URI")
 mongo_client = MongoClient(MONGO_URI)
 db = mongo_client["smart_scheduler"]
@@ -15,9 +14,7 @@ def notify_user_login_success(user_id):
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
     if not bot_token:
         return
-    
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-    
     payload = {
         "chat_id": user_id,
         "text": "החיבור ל-Google הצליח 🎉\nעכשיו בוא נגדיר את היומנים שלך באופן חד-פעמי כדי שאוכל לעזור לך לתכנן את הלו״ז.",
@@ -33,13 +30,11 @@ app = Flask(__name__)
 @app.route('/')
 def home():
     return "Bot is awake!", 200
-# חובה כדי שנוכל לבדוק את זה לוקאלית
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
 CLIENT_SECRETS_FILE = "client_secret_web.json"
 SCOPES = ['https://www.googleapis.com/auth/calendar', 'https://www.googleapis.com/auth/tasks.readonly']
 
-# כאן נשמור את התהליך (ה-flow) של כל משתמש כדי שהשרת לא ישכח אותו
 active_flows = {}
 
 @app.route('/login/<user_id>')
@@ -64,18 +59,12 @@ def login(user_id):
 @app.route('/oauth2callback')
 def oauth2callback():
     user_id = request.args.get('state') 
-    
-    # שולפים את אותו אובייקט בדיוק שהתחיל את התהליך
     flow = active_flows.get(user_id)
-    
     if not flow:
         return "שגיאה: התהליך לא נמצא. נסי להתחבר מחדש."
-    
     flow.fetch_token(authorization_response=request.url)
-    
     creds = flow.credentials
     
-    # המרה של ה-Credentials למילון JSON ושמירה ב-MongoDB
     token_data = json.loads(creds.to_json())
     tokens_collection.update_one(
         {"user_id": str(user_id)},
