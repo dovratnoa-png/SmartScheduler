@@ -145,12 +145,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # אם אין טוקן - מציגים את הודעת ההתחברות הרגילה
     login_url = f"https://smartscheduler-pknn.onrender.com/login/{user_id}"
 
-   welcome_text = (
+    welcome_text = (
     f"היי {first_name}! 👋 איזה כיף שבאת :)\n\n"
     "כדי שאוכל לראות את התמונה המלאה, לייעץ ולעזור לך לתכנן את הזמן נכון, נשאר רק שלב אחד קטן – לחבר אותי ל-Google Calendar שלך.\n\n"
     "במסך הבא, כשמתחברים ליומן, גוגל מקפיצה אזהרה של \"Google hasn't verified this app\" כי זה פרויקט אישי. אפשר ללחוץ על Advanced (מתקדם) ואז על הלינק למטה כדי להמשיך :)\n\n"
     f"🔗 <a href='{login_url}'>לחץ/י כאן לאישור החיבור ליומן</a> (זה מאובטח 🤓)."
-)
+    )
 
     await update.message.reply_text(welcome_text, parse_mode='HTML')
 
