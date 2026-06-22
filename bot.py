@@ -17,16 +17,16 @@ MONGO_URI = os.getenv("MONGO_URI")
 mongo_client = MongoClient(MONGO_URI)
 db = mongo_client["smart_scheduler"]
 tokens_collection = db["tokens"]
-# מעבר לקליינט הא-סינכרוני כדי לאפשר למספר משתמשים לדבר במקביל
+
+# Async Anthropic client for concurrent users
 client = AsyncAnthropic(api_key=CLAUDE_API_KEY)
 
 pending_schedules = {}
 chat_histories = {} 
 
-# === פונקציית עזר לבניית מקלדת היומנים ===
+# === Calendar Keyboard Builder ===
 def build_calendar_keyboard(calendars, selected_ids):
     keyboard = []
-    # אנחנו משתמשים ב-enumerate כדי לקבל מספר סידורי (i) לכל יומן
     for i, cal in enumerate(calendars):
         text = f"✅ {cal['summary']}" if cal['id'] in selected_ids else cal['summary']
         keyboard.append([InlineKeyboardButton(text, callback_data=f"cal_{i}")])
@@ -34,20 +34,20 @@ def build_calendar_keyboard(calendars, selected_ids):
     keyboard.append([InlineKeyboardButton("🏁 סיימתי לבחור", callback_data="finish_selection")])
     return InlineKeyboardMarkup(keyboard)
 
-# === פרומפט המערכת של קלוד ===
+# === System Prompt ===
 def get_system_prompt(events_context, calendars_text):
-    # 1. הגדרת שעון ישראל כדי שהשרת של Render לא יתבלבל בלילות
+    # 1. Set local timezone (Israel)
     israel_tz = timezone(timedelta(hours=3))
     now = datetime.now(israel_tz)
     
     days = ["שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת", "ראשון"]
     
-    # 2. בניית "שליף תאריכים" חכם לקלוד - כדי שלא יצטרך לחשב תאריכים לבד!
+    # 2. Pre-compute upcoming dates for Claude's context
     upcoming_dates = []
     for i in range(7):
         curr_date = now + timedelta(days=i)
         day_name = days[curr_date.weekday()]
-        date_for_json = curr_date.strftime('%Y-%m-%d') # זה מה שחשוב ל-JSON!
+        date_for_json = curr_date.strftime('%Y-%m-%d')
         date_for_display = curr_date.strftime('%d/%m/%Y')
         
         if i == 0:
@@ -119,30 +119,30 @@ def get_system_prompt(events_context, calendars_text):
     רק לאחר קבלת אישור מפורש (כמו 'כן', 'בטח' וכדומה), מותר לך לשלוח את תשובת ה-JSON עם הפעולות.
     """
 
-# === פקודות בוט ===
+# === Bot Handlers ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     
-    # 1. שולפים את השם של המשתמש מטלגרם
+    # 1. Extract user details
     first_name = update.effective_user.first_name or ""
     last_name = update.effective_user.last_name or ""
     full_name = f"{first_name} {last_name}".strip()
     username = update.effective_user.username or "ללא יוזרניים"
 
-    # 2. מעדכנים או יוצרים את השורה של המשתמש במונגו עם השם שלו
+    # 2. Update or create user in MongoDB
     tokens_collection.update_one(
         {"user_id": user_id},
         {"$set": {"name": full_name, "telegram_username": username}},
         upsert=True
     )
 
-    # 3. בודקים במונגו אם המשתמש כבר חיבר את היומן שלו
+    # 3. Check if user is already authenticated
     user_data = tokens_collection.find_one({"user_id": user_id})
     if user_data and "token" in user_data:
         await update.message.reply_text(f"היי {first_name}! אנחנו כבר מחוברים ומסונכרנים. מה הלו״ז שלנו להיום? 🗓️")
         return
 
-    # אם אין טוקן - מציגים את הודעת ההתחברות הרגילה
+    # Show login message if no token exists
     login_url = f"https://smartscheduler-pknn.onrender.com/login/{user_id}"
 
     welcome_text = (
@@ -155,14 +155,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(welcome_text, parse_mode='HTML')
 
 async def choose_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # 1. זיהוי המשתמש (בלי לקבוע מראש איך לשלוח את ההודעה)
+    # 1. Identify user context
     if update.callback_query:
         await update.callback_query.answer()
         user_id = str(update.callback_query.message.chat_id)
     else:
         user_id = str(update.effective_user.id)
 
-    # 2. שליפת היומנים מגוגל
+    # 2. Fetch Google Calendars
     calendars = list_user_calendars(user_id)
     if not calendars:
         error_msg = "עוד לא התחברת לגוגל, או שלא מצאתי יומנים בחשבון הזה."
@@ -172,12 +172,12 @@ async def choose_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(error_msg)
         return
 
-    # שמירה בזיכרון של הבוט
+    # Store in context
     context.user_data['all_calendars'] = calendars
     if 'selected_calendars' not in context.user_data:
         context.user_data['selected_calendars'] = []
 
-    # 3. הטקסט החדש והנקי (משלב את ההצלחה ואת ההסבר)
+    # 3. Prepare calendar selection message
     text = (
         "כדי שאוכל לנהל את הלו״ז שלך בצורה חכמה, בוא/י נגדיר פעם אחת את היומנים:\n\n"
         "👁 <b>קריאה:</b> אקרא מכל היומנים שתבחרי מטה כדי למנוע התנגשויות.\n"
@@ -188,12 +188,10 @@ async def choose_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     reply_markup = build_calendar_keyboard(context.user_data['all_calendars'], context.user_data['selected_calendars'])
     
-    # 4. רגע האמת של ה-UX: עריכה מול שליחה חדשה
+    # 4. Send or edit message based on update type
     if update.callback_query:
-        # כאן קורה הקסם: ההודעה הקיימת משתנה במקום להוסיף אחת חדשה!
         await update.callback_query.edit_message_text(text, reply_markup=reply_markup, parse_mode='HTML')
     else:
-        # הגעה מפקודה רגילה (כמו /calendars)
         await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='HTML')
 
 
@@ -214,7 +212,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tasks = list_tasks(user_id)
     existing_events = events + tasks
 
-    # --- יצירת הקשר היומנים עבור קלוד ---
+    # --- Calendar Context for Claude ---
     selected_ids = context.user_data.get('selected_calendars', [])
     all_cals = context.user_data.get('all_calendars', [])
     active_cals = [cal for cal in all_cals if cal['id'] in selected_ids]
@@ -243,7 +241,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         event_id = e.get('id', 'unknown_id')
         title = e.get('summary', 'ללא נושא')
 
-        # שולפים בבטחה את הנתונים כדי למנוע קריסות
+        # Safely extract event data
         start_data = e.get('start', {})
 
         if 'dateTime' in start_data:
@@ -253,22 +251,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 start_dt = datetime.fromisoformat(start_str.replace('Z', ''))
                 end_dt = datetime.fromisoformat(end_str.replace('Z', ''))
                 
-                # --- קסם הדדליינים ---
-                # אם האירוע הוגדר מהשעה 00:00 עד 23:00/23:59, הבוט יבין שזה רק ציון דרך ולא חוסם את היום!
+                # --- Deadline handling ---
+                # Treat all-day events as deadlines rather than time-blocking events
                 if start_dt.hour == 0 and start_dt.minute == 0 and end_dt.hour >= 23:
                     deadlines.append(f"- 📌 [דדליין] {title} | ID: {event_id} | יומן: {cal_id} ({start_dt.strftime('%d/%m/%Y')})")
                 else:
                     time_format = f"בתאריך {start_dt.strftime('%d/%m/%Y')} משעה {start_dt.strftime('%H:%M')} עד {end_dt.strftime('%H:%M')}"
                     regular_events.append(f"- 📅 אירוע: {title} | ID: {event_id} | יומן: {cal_id} ({time_format})")
             except Exception:
-                # למקרה שהתאריך לא בפורמט צפוי
+                # Fallback for unexpected date formats
                 regular_events.append(f"- 📅 אירוע: {title} | ID: {event_id} | יומן: {cal_id} מ-{start_str} עד {end_str}")
         else:
-            # אלו אירועי "יום שלם" אמיתיים או משימות בלי שעות בכלל
+            # True all-day events or tasks without times
             date_str = start_data.get('date', 'תאריך לא ידוע')
             deadlines.append(f"- 📌 [דדליין/משימה] {title} | ID: {event_id} ב-{date_str}")
             
-    # בונים את הטקסט לקלוד בשני בלוקים מופרדים לחלוטין
+    # Build context text in separate blocks
     events_context = "=== אירועים ביומן (זמן תפוס) ===\n" 
     events_context += "\n".join(regular_events) if regular_events else "אין אירועים."
     
@@ -276,7 +274,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     events_context += "\n".join(deadlines) if deadlines else "אין דדליינים כרגע."
     
     try:
-        # הקריאה לקלוד הפכה לא-סינכרונית עם הפקודה await
+        # Async API call to Claude
         message = await client.messages.create(
             model="claude-opus-4-8", 
             max_tokens=1000,
@@ -297,13 +295,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     context.user_data['pending_actions'] = {}
                 context.user_data['pending_actions'][user_id] = data
                 
-                # --- חיתוך אגרסיבי ונקי ---
-                # מוצאים את המיקום המדויק שבו ה-JSON (הסוגר המסולסל הראשון) מתחיל
+                # --- Clean JSON parsing ---
+                # Find exact start of JSON
                 json_start_idx = bot_reply.find('{')
-                # לוקחים רק את מה שקורה לפני ה-JSON
+                # Extract conversational text before JSON
                 clean_text = bot_reply[:json_start_idx].strip()
                 
-                # מנקים באופן מוחלט שאריות כמו גרשים או המילה json שנותרו ממש לפני ה-JSON
+                # Remove trailing formatting artifacts
                 for garbage in ["```json", "```", "json:", "json"]:
                     if clean_text.endswith(garbage):
                         clean_text = clean_text[:-len(garbage)].strip()
@@ -334,7 +332,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await choose_calendar(update, context)
         return
         
-    # --- לוגיקת בחירת יומנים ---
+    # --- Calendar Selection Logic ---
     if data == "finish_selection":
         selected = context.user_data.get('selected_calendars', [])
         if not selected:
@@ -367,9 +365,9 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_reply_markup(reply_markup=reply_markup)
         return
 
-    # --- לוגיקת אישור/ביטול אירועים ---
+    # --- Confirm/Cancel Event Logic ---
     if data == 'confirm':
-        # שולפים את כל הפעולות ששמרנו בזיכרון
+        # Retrieve pending actions from memory
         pending_data = context.user_data.get('pending_actions', {}).get(user_id, {})
         
         scheduled = pending_data.get('scheduled_events', [])
@@ -382,7 +380,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("מתחיל לארגן את היומן... ⏳")
         days_heb = ["שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת", "ראשון"]
         
-        # 1. ביצוע מחיקות
+        # 1. Process deletions
         for e in deleted:
             cal_id = e.get('calendar_id')
             event_id = e.get('event_id')
@@ -392,7 +390,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 await query.message.reply_text(f"⚠️ שגיאה במחיקה: {msg}")
 
-        # 2. ביצוע הזזות ועדכונים
+        # 2. Process updates
         for e in updated_events_list:
             cal_id = e.get('calendar_id')
             event_id = e.get('event_id')
@@ -401,7 +399,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             new_title = e.get('title')
             
-            # שולפים את הנתונים החדשים (אם קלוד לא העביר, זה יהיה None/False)
+            # Extract new data (defaults if missing)
             new_location = e.get('location')
             disable_reminders = e.get('disable_reminders', True)
             
@@ -419,7 +417,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 await query.message.reply_text(f"⚠️ שגיאה בעדכון: {msg}")
 
-        # 3. יצירת אירועים חדשים
+        # 3. Process new events
         for e in scheduled:
             start_iso = f"{e['start_date']}T{e['start_time']}:00+03:00"
             end_iso = f"{e['end_date']}T{e['end_time']}:00+03:00"
@@ -433,17 +431,15 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             overlap, conflict = is_overlap(start_iso, end_iso, existing_events)
             
-            # בודקים אם קלוד העביר את הסיסמה לעקוף את החסימה
+            # Check if overlap override flag is set
             override = e.get('override_overlap', False)
             
             if overlap and not override:
                 await query.message.reply_text(f"⚠️ דילגתי על '{e['title']}' - מזהה התנגשות עם '{conflict}'.\n(אם זה בכוונה, פשוט תכתב/י לי: 'תקבע בכל זאת').")
             else:
-                # שולפים נתונים חדשים לפני היצירה
                 location = e.get('location')
                 disable_reminders = e.get('disable_reminders', True)
                 
-                # מעבירים אותם לפונקציה המעודכנת
                 create_event(
                     user_id, e['title'], start_iso, end_iso, 
                     calendar_id=target_cal_id,
@@ -469,25 +465,23 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 await query.message.reply_text(success_msg, parse_mode='HTML')
         
-        # מנקים את הזיכרון אחרי שסיימנו
+        # Clear memory after execution
         if user_id in context.user_data.get('pending_actions', {}):
             del context.user_data['pending_actions'][user_id]
             
         await query.message.reply_text("✅ סיימתי! הלו״ז שלך מעודכן ומסודר.")
         
     elif data == 'cancel':
-        # ניקוי הזיכרון גם במקרה של ביטול
+        # Clear memory on cancel
         if user_id in context.user_data.get('pending_actions', {}):
             del context.user_data['pending_actions'][user_id]
         await query.edit_message_text("❌ בוטל. הלו\"ז נשאר כמו שהיה.")
 
-
-# === פונקציית השרת ברקע לטובת Render ===
+# === Background Web Server for Render ===
 def run_web_server():
     port = int(os.environ.get("PORT", 5000))
-    # ודאי שהמשתנה flask_app שהבאנו בתחילת הקובץ אכן מוגדר נכון
+    # Ensure flask_app is defined and imported properly
     flask_app.run(host="0.0.0.0", port=port)
-
 
 if __name__ == '__main__':
     

@@ -13,21 +13,21 @@ SCOPES = ['https://www.googleapis.com/auth/calendar', 'https://www.googleapis.co
 CALENDAR_ID = os.getenv('CALENDAR_ID', 'primary')
 print(f"DEBUG: Using Calendar ID: {CALENDAR_ID}") 
 
-# חיבור לבסיס הנתונים MongoDB
+# Connect to MongoDB
 MONGO_URI = os.getenv("MONGO_URI")
 mongo_client = MongoClient(MONGO_URI)
 db = mongo_client["smart_scheduler"]
 tokens_collection = db["tokens"]
 
 def get_credentials(user_id):
-    # שליפת הנתונים מתוך ה-MongoDB לפי ה-user_id של טלגרם
+    # Retrieve user token from MongoDB
     user_token = tokens_collection.find_one({"user_id": str(user_id)})
     if user_token and "token" in user_token:
         creds = Credentials.from_authorized_user_info(user_token["token"], SCOPES)
         if creds:
             if creds.valid:
                 return creds
-            # אם תוקף הטוקן פג אך קיים טוקן רענון, נרענן אותו אוטומטית ונשמור חזרה
+            # Refresh expired token and update database
             elif creds.expired and creds.refresh_token:
                 try:
                     creds.refresh(Request())
@@ -57,6 +57,7 @@ def list_events(user_id, calendar_ids=None):
     now_dt = datetime.utcnow()
     now = now_dt.isoformat() + 'Z'
     
+    # Fetch events for the next 21 days
     max_dt = now_dt + timedelta(days=21)
     time_max = max_dt.isoformat() + 'Z'
     
@@ -142,7 +143,7 @@ def is_overlap(new_start_iso, new_end_iso, existing_events):
     return False, None
 
 def list_tasks(user_id):
-    # שימוש ישיר בפונקציית ה-credentials המעודכנת של MongoDB
+    # Fetch tasks using credentials from MongoDB
     creds = get_credentials(user_id)
         
     if not creds or not creds.valid:
@@ -208,10 +209,10 @@ def update_event_time(user_id, calendar_id, event_id, new_start_iso=None, new_en
         creds = get_credentials(user_id)
         service = build('calendar', 'v3', credentials=creds)
         
-        # 1. שולפים את האירוע הקיים מגוגל
+        # 1. Fetch existing event from Google Calendar
         event = service.events().get(calendarId=calendar_id, eventId=event_id).execute()
         
-        # 2. מעדכנים רק את מה שהתקבל (אם התקבל)
+        # 2. Update provided fields
         if new_start_iso:
             event['start'] = {'dateTime': new_start_iso}
         if new_end_iso:
@@ -225,7 +226,7 @@ def update_event_time(user_id, calendar_id, event_id, new_start_iso=None, new_en
         if disable_reminders:
             event['reminders'] = {'useDefault': False, 'overrides': []}
         
-        # 3. דוחפים את העדכון חזרה לגוגל
+        # 3. Push updates back to Google API
         updated_event = service.events().update(calendarId=calendar_id, eventId=event_id, body=event).execute()
         
         return True, updated_event.get('summary', 'אירוע ללא שם')
